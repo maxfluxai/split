@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIVIDE // CONQUER</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+        :root {
+            --bg: #000000;
+            --fg: #ffffff;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: 'Space Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        /* CRT Overlay */
+        .crt-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            z-index: 50; pointer-events: none; opacity: 0.6;
+        }
+
+        /* Glitch Animations */
+        @keyframes glitch-anim {
+            0% { transform: translate(0) }
+            20% { transform: translate(-2px, 2px) }
+            40% { transform: translate(-2px, -2px) }
+            60% { transform: translate(2px, 2px) }
+            80% { transform: translate(2px, -2px) }
+            100% { transform: translate(0) }
+        }
+        .glitch-hover:hover {
+            animation: glitch-anim 0.2s cubic-bezier(.25, .46, .45, .94) both infinite;
+            background-color: var(--fg); color: var(--bg);
+        }
+
+        /* Scanline Animation */
+        @keyframes scan {
+            0% { top: -10%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 110%; opacity: 0; }
+        }
+        .scanline {
+            position: absolute; width: 100%; height: 4px;
+            background: var(--fg); box-shadow: 0 0 15px var(--fg), 0 0 30px var(--fg);
+            animation: scan 2s linear infinite; z-index: 10;
+        }
+
+        /* Blocky Button Transitions */
+        .cyber-btn {
+            position: relative; border: 1px solid var(--fg); text-transform: uppercase;
+            letter-spacing: 2px; transition: all 0.1s; background: transparent; color: var(--fg); overflow: hidden;
+            cursor: pointer;
+        }
+        .cyber-btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: var(--fg); transition: all 0.2s ease; z-index: -1;
+        }
+        .cyber-btn:hover::before { left: 0; }
+        .cyber-btn:hover { color: var(--bg); font-weight: bold; }
+
+        /* Image Slice Transitions */
+        .slice-container { transition: gap 0.8s cubic-bezier(0.8, 0, 0.2, 1); }
+        .slice-container.sliced { gap: 1.5rem; }
+        .slice-item { transition: transform 0.8s cubic-bezier(0.8, 0, 0.2, 1), opacity 0.5s; }
+        .slice-item:hover { transform: scale(1.02); border-color: var(--fg); z-index: 10; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); border-left: 1px solid #333; }
+        ::-webkit-scrollbar-thumb { background: var(--fg); }
+        
+        /* Utility Classes for JS */
+        .hidden-el { display: none !important; }
+    </style>
+</head>
+<body class="min-h-screen w-full flex flex-col items-center justify-center p-6 relative pb-24">
+    <div class="crt-overlay"></div>
+
+    <div id="toast" class="hidden-el fixed top-6 left-1/2 transform -translate-x-1/2 border border-white bg-black px-4 py-2 text-sm z-50 animate-pulse uppercase tracking-widest flex items-center gap-2">
+        <i data-lucide="terminal" class="w-4 h-4"></i>
+        <span id="toast-message"></span>
+    </div>
+
+    <div class="w-full max-w-5xl flex justify-between items-end mb-8 border-b border-white/30 pb-4 z-10">
+        <div>
+            <h1 id="scramble-header" class="text-4xl font-bold tracking-tighter uppercase">DIVIDE // CONQUER</h1>
+            <p class="text-xs text-white/60 tracking-widest mt-2 uppercase">Image_Fragmentation_Utility_v1.0</p>
+        </div>
+        <div class="flex items-center gap-2 text-white/50 animate-pulse hidden sm:flex">
+            <i data-lucide="cpu" class="w-5 h-5"></i>
+            <span class="text-xs tracking-widest">ONLINE</span>
+        </div>
+    </div>
+
+    <div class="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-start relative z-10">
+        
+        <div class="flex flex-col gap-6">
+            
+            <div class="border border-white/20 p-4 bg-black/50 backdrop-blur-sm">
+                <h3 class="text-xs text-white/50 tracking-widest mb-2">CURRENT_STATUS</h3>
+                <div id="status-display" class="font-bold text-xl tracking-wider uppercase glitch-hover inline-block cursor-default">
+                    IDLE
+                </div>
+            </div>
+
+            <div id="upload-zone" class="border-2 border-dashed border-white/40 hover:border-white h-64 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-white/5 group relative overflow-hidden" onclick="document.getElementById('file-upload').click()">
+                <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.1)_0,transparent_100%)] opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <i data-lucide="upload" class="w-12 h-12 mb-4 text-white/60 group-hover:text-white transition-colors group-hover:scale-110 duration-300"></i>
+                <p class="tracking-widest text-sm text-center px-4 uppercase">
+                    Initialize Data Feed <br/>
+                    <span class="text-xs text-white/50">(Select 9:16 Image)</span>
+                </p>
+                <input type="file" id="file-upload" accept="image/*" class="hidden-el" onchange="handleImageUpload(event)">
+            </div>
+
+            <button id="execute-btn" onclick="executeSplitProtocol()" class="hidden-el cyber-btn py-4 flex items-center justify-center gap-3 w-full text-lg group">
+                <i data-lucide="scissors" class="w-6 h-6 group-hover:rotate-90 transition-transform duration-500"></i>
+                Execute Split
+            </button>
+
+            <div id="download-zone" class="hidden-el flex flex-col gap-4 border border-white/30 p-6 bg-black">
+                <h3 class="text-xs text-white/50 tracking-widest mb-2 border-b border-white/20 pb-2">DATA_EXTRACTION</h3>
+                
+                <button onclick="downloadZip()" class="cyber-btn py-3 px-4 flex items-center justify-between group">
+                    <span class="flex items-center gap-2">
+                        <i data-lucide="archive" class="w-4 h-4"></i> Download Complete Archive (ZIP)
+                    </span>
+                    <span class="text-xs opacity-50 group-hover:opacity-100">LOSSLESS</span>
+                </button>
+                
+                <div class="h-px bg-white/20 my-2 w-full"></div>
+                <div id="fragment-buttons" class="flex flex-col gap-2"></div>
+
+                <button onclick="resetSystem()" class="mt-6 border border-white/20 text-white/50 hover:text-white hover:border-white py-2 text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 bg-transparent">
+                    <i data-lucide="x" class="w-4 h-4"></i> Reset Protocol
+                </button>
+            </div>
+        </div>
+
+        <div class="border border-white/20 p-4 min-h-[600px] flex items-center justify-center bg-[#050505] relative overflow-hidden">
+            <div class="absolute top-2 left-2 text-[10px] text-white/30 tracking-widest z-20">VISUAL_OUTPUT_NODE</div>
+            
+            <div id="idle-grid" class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
+
+            <div id="visualizer-layout" class="hidden-el relative w-full mx-auto flex flex-col md:flex-row justify-center items-start transition-all duration-700 max-w-sm">
+                
+                <div id="source-container" class="relative w-full overflow-hidden border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)] transition-all duration-700">
+                    <div id="scanline-el" class="hidden-el scanline"></div>
+                    <img id="source-img" class="w-full h-auto block object-contain filter grayscale hover:grayscale-0 transition-all duration-700" />
+                    <div id="processing-overlay" class="hidden-el absolute inset-0 bg-white/10 animate-pulse mix-blend-overlay"></div>
+                    <div id="source-label" class="hidden-el absolute top-2 left-2 text-[10px] bg-black/80 px-2 py-1 border border-white/20 text-white tracking-widest uppercase shadow-lg backdrop-blur-sm">SOURCE_FILE</div>
+                </div>
+
+                <div id="fragments-container" class="hidden-el flex flex-col w-full md:w-1/2 slice-container gap-0">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Global State
+        let imageSrc = null;
+        let slicedImages = [];
+
+        // DOM Elements
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toast-message');
+        const statusDisplay = document.getElementById('status-display');
+        
+        const uploadZone = document.getElementById('upload-zone');
+        const executeBtn = document.getElementById('execute-btn');
+        const downloadZone = document.getElementById('download-zone');
+        
+        const idleGrid = document.getElementById('idle-grid');
+        const visLayout = document.getElementById('visualizer-layout');
+        const sourceContainer = document.getElementById('source-container');
+        const sourceImg = document.getElementById('source-img');
+        const scanlineEl = document.getElementById('scanline-el');
+        const processingOverlay = document.getElementById('processing-overlay');
+        const sourceLabel = document.getElementById('source-label');
+        
+        const fragmentsContainer = document.getElementById('fragments-container');
+        const fragmentButtons = document.getElementById('fragment-buttons');
+
+        // Scramble Text Effect
+        const scrambleText = (elementId, originalText) => {
+            const el = document.getElementById(elementId);
+            const chars = '!<>-_\\\\/[]{}—=+*^?#________';
+            let iteration = 0;
+            const interval = setInterval(() => {
+                el.innerText = originalText.split('').map((letter, index) => {
+                    if (index < iteration) return originalText[index];
+                    return chars[Math.floor(Math.random() * chars.length)];
+                }).join('');
+                if (iteration >= originalText.length) clearInterval(interval);
+                iteration += 1 / 3;
+            }, 30);
+        };
+        scrambleText('scramble-header', 'DIVIDE // CONQUER');
+
+        // Utility: Show Toast
+        function showMessage(msg, duration = 3000) {
+            toastMsg.innerText = msg;
+            toast.classList.remove('hidden-el');
+            if (duration) {
+                setTimeout(() => toast.classList.add('hidden-el'), duration);
+            }
+        }
+
+        // Utility: Update Status
+        function updateStatus(status) {
+            statusDisplay.innerText = status;
+        }
+
+        // Step 1: Upload Image
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showMessage('ERROR: INVALID_FILE_TYPE');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imageSrc = e.target.result;
+                sourceImg.src = imageSrc;
+                
+                // Update UI
+                updateStatus('LOADED');
+                uploadZone.classList.add('hidden-el');
+                executeBtn.classList.remove('hidden-el');
+                idleGrid.classList.add('hidden-el');
+                visLayout.classList.remove('hidden-el');
+                
+                showMessage('SYSTEM: IMAGE_LOADED_INTO_MEMORY');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Step 2: Execute Split
+        function executeSplitProtocol() {
+            if (!imageSrc) return;
+            
+            updateStatus('PROCESSING');
+            executeBtn.classList.add('hidden-el');
+            scanlineEl.classList.remove('hidden-el');
+            processingOverlay.classList.remove('hidden-el');
+            showMessage('SYSTEM: EXECUTING_SPLIT_PROTOCOL', 0);
+
+            // Artificial aesthetic delay
+            setTimeout(() => {
+                const img = new Image();
+                img.onload = () => {
+                    const { naturalWidth, naturalHeight } = img;
+                    const h1 = Math.floor(naturalHeight / 3);
+                    const h2 = Math.floor(naturalHeight / 3);
+                    const h3 = naturalHeight - h1 - h2;
+                    const heights = [h1, h2, h3];
+                    
+                    let currentY = 0;
+                    slicedImages = [];
+
+                    for (let i = 0; i < 3; i++) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = naturalWidth;
+                        canvas.height = heights[i];
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, currentY, naturalWidth, heights[i], 0, 0, naturalWidth, heights[i]);
+                        slicedImages.push(canvas.toDataURL('image/png', 1.0));
+                        currentY += heights[i];
+                    }
+
+                    renderSlices();
+                };
+                img.src = imageSrc;
+            }, 2000);
+        }
+
+        // Step 3: Render Output
+        function renderSlices() {
+            updateStatus('SLICED');
+            toast.classList.add('hidden-el');
+            scanlineEl.classList.add('hidden-el');
+            processingOverlay.classList.add('hidden-el');
+            
+            // Adjust layout for before/after view
+            visLayout.classList.remove('max-w-sm');
+            visLayout.classList.add('max-w-4xl', 'gap-6', 'md:gap-12');
+            sourceContainer.classList.remove('w-full');
+            sourceContainer.classList.add('w-full', 'md:w-1/2', 'opacity-50', 'hover:opacity-100');
+            sourceLabel.classList.remove('hidden-el');
+            
+            fragmentsContainer.innerHTML = '';
+            fragmentButtons.innerHTML = '';
+
+            slicedImages.forEach((src, idx) => {
+                // Add Image Element
+                const div = document.createElement('div');
+                div.className = 'w-full relative slice-item border border-white/30 bg-black cursor-crosshair overflow-hidden group';
+                div.style.transitionDelay = `${idx * 0.15}s`;
+                div.innerHTML = `
+                    <img src="${src}" class="w-full h-auto block filter grayscale group-hover:grayscale-0 transition-all duration-500 opacity-80 group-hover:opacity-100" />
+                    <div class="absolute top-2 right-2 text-[9px] bg-black/80 px-2 py-1 border border-white/20 text-white group-hover:bg-white group-hover:text-black transition-colors tracking-widest uppercase">FRG_0${idx + 1}</div>
+                `;
+                fragmentsContainer.appendChild(div);
+
+                // Add Download Button
+                const btn = document.createElement('button');
+                btn.className = 'cyber-btn py-2 px-4 flex items-center justify-between text-sm';
+                btn.onclick = () => downloadImage(src, `fragment_0${idx+1}.png`);
+                btn.innerHTML = `
+                    <span class="flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Extract Fragment ${idx + 1}</span>
+                    <span class="text-xs text-white/40">PNG</span>
+                `;
+                fragmentButtons.appendChild(btn);
+            });
+
+            // Trigger CSS gap transition after append
+            setTimeout(() => {
+                fragmentsContainer.classList.remove('hidden-el');
+                fragmentsContainer.classList.add('sliced');
+                downloadZone.classList.remove('hidden-el');
+                lucide.createIcons();
+                showMessage('SYSTEM: PROTOCOL_COMPLETE');
+            }, 50);
+        }
+
+        // Action: Individual Download
+        function downloadImage(dataUrl, filename) {
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showMessage(`SYSTEM: DOWNLOADED_${filename.toUpperCase()}`);
+        }
+
+        // Action: ZIP Download
+        async function downloadZip() {
+            if (!window.JSZip) {
+                showMessage('ERROR: JSZIP_MODULE_NOT_LOADED');
+                return;
+            }
+            showMessage('SYSTEM: COMPILING_ARCHIVE', 0);
+            const zip = new window.JSZip();
+            
+            slicedImages.forEach((dataUrl, i) => {
+                const base64Data = dataUrl.split(',')[1];
+                zip.file(`slice_${i + 1}.png`, base64Data, { base64: true });
+            });
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = 'split_protocol_archive.zip';
+            link.click();
+            showMessage('SYSTEM: ARCHIVE_DOWNLOADED');
+        }
+
+        // Action: Reset System
+        function resetSystem() {
+            imageSrc = null;
+            slicedImages = [];
+            document.getElementById('file-upload').value = '';
+            
+            updateStatus('IDLE');
+            uploadZone.classList.remove('hidden-el');
+            executeBtn.classList.add('hidden-el');
+            downloadZone.classList.add('hidden-el');
+            
+            idleGrid.classList.remove('hidden-el');
+            visLayout.classList.add('hidden-el', 'max-w-sm');
+            visLayout.classList.remove('max-w-4xl', 'gap-6', 'md:gap-12');
+            
+            sourceContainer.classList.add('w-full');
+            sourceContainer.classList.remove('md:w-1/2', 'opacity-50', 'hover:opacity-100');
+            sourceLabel.classList.add('hidden-el');
+            fragmentsContainer.classList.add('hidden-el', 'gap-0');
+            fragmentsContainer.classList.remove('sliced');
+            
+            showMessage('SYSTEM: RESET_SUCCESSFUL');
+        }
+    </script>
+</body>
+</html>
